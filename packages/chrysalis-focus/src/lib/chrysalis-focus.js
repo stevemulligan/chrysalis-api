@@ -20,16 +20,23 @@ import Delimiter from "@serialport/parser-delimiter"
 let instance = null
 
 class Focus {
-    constructor() {
+    constructor(options = {}) {
+        this.options = {...options}
         if (!instance) {
             instance = this
             this.commands = {
                 help: this._help
             }
-            this.timeout = 5000
+            this.egress_prefix = this.options.egress_prefix || "EGRESS_";
+            this.egress_callback = this.options.egress_callback || this._egress_callback;
+            this.timeout = this.options.timeout || 5000;
         }
 
         return instance
+    }
+
+    _egress_callback(data) {
+    	console.log("EGRESS DATA: " + data);
     }
 
     async find(...devices) {
@@ -76,21 +83,29 @@ class Focus {
         this.callbacks = []
         this.parser.on("data", (data) => {
             data = data.toString("utf-8")
-            if (data == ".") {
-                let result = this.result,
-                    resolve = this.callbacks.shift()
 
-                this.result = ""
-                if (resolve) {
-                    resolve(result)
-                }
-            } else {
-                if (this.result.length == 0) {
-                    this.result = data
-                } else {
-                    this.result += "\r\n" + data
-                }
-            }
+	        if (data.trim().startsWith(this.egress_prefix))
+	        {
+	        	this.egress_callback(data.replace(this.egress_prefix, '').trim());
+	        } else {
+		        if (data == ".") {
+			        let result = this.result,
+				        resolve = this.callbacks.shift()
+
+			        this.result = ""
+			        if (resolve) {
+				        resolve(result)
+			        } else {
+				        console.log("No callbacks waiting data: " + result);
+			        }
+		        } else {
+			        if (this.result.length == 0) {
+				        this.result = data
+			        } else {
+				        this.result += "\r\n" + data
+			        }
+		        }
+	        }
         })
 
         return this._port
